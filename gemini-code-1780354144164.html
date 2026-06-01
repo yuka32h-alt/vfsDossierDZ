@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student VFS Visa Checklist Hub</title>
+    <!-- Tailwind CSS for clean presentation styling -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen antialiased font-sans">
+
+    <div class="max-w-4xl mx-auto px-4 py-10">
+        <!-- Dashboard Header Card -->
+        <header class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-8">
+            <h1 class="text-2xl font-bold tracking-tight text-slate-900 mb-1">Student Visa Document Tracker</h1>
+            <p class="text-sm text-slate-500 mb-4">Prepare your VFS checklist profile. All changes are securely saved instantly to your database account session.</p>
+            
+            <!-- Overall Progress Bar Container -->
+            <div class="mt-4">
+                <div class="flex justify-between text-xs font-semibold text-slate-600 mb-1">
+                    <span>Overall Checklist Completion</span>
+                    <span id="progress-text">0% (0 of 0 Ready)</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Checklist Categories Container -->
+        <main id="checklist-container" class="space-y-6">
+            <div class="text-center py-12 text-slate-400">Loading your secure document portfolio...</div>
+        </main>
+    </div>
+
+    <script>
+        // On initialization, fetch records from the backend API database mapping
+        document.addEventListener('DOMContentLoaded', fetchChecklist);
+
+        async function fetchChecklist() {
+            try {
+                const response = await fetch('/api/checklist');
+                const items = await response.json();
+                renderChecklist(items);
+            } catch (error) {
+                console.error('Database connection failed fetching data:', error);
+                document.getElementById('checklist-container').innerHTML = 
+                    `<div class="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 text-sm">Failed to fetch document state from the SQLite server. Verify backend is running.</div>`;
+            }
+        }
+
+        function renderChecklist(items) {
+            const container = document.getElementById('checklist-container');
+            container.innerHTML = '';
+
+            // Group data dynamically by database 'category' field
+            const groups = {};
+            items.forEach(item => {
+                if (!groups[item.category]) groups[item.category] = [];
+                groups[item.category].push(item);
+            });
+
+            // Calculate progress bars math parameters
+            const totalItems = items.length;
+            const readyItems = items.filter(i => i.status === 'ready').length;
+            const percentage = totalItems > 0 ? Math.round((readyItems / totalItems) * 100) : 0;
+
+            document.getElementById('progress-bar').style.width = `${percentage}%`;
+            document.getElementById('progress-text').innerText = `${percentage}% (${readyItems} of ${totalItems} Ready)`;
+
+            // Loop through groups to display tables dynamically
+            for (const [category, docs] of Object.entries(groups)) {
+                const section = document.createElement('section');
+                section.className = 'bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs';
+                
+                let htmlHeader = `
+                    <div class="bg-slate-100 px-5 py-3 border-b border-slate-200">
+                        <h2 class="text-sm font-bold tracking-wide text-slate-700 uppercase">${category}</h2>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                `;
+
+                let htmlRows = '';
+                docs.forEach(doc => {
+                    // Match select border/text highlight status accent colors dynamically
+                    let borderAccent = 'border-slate-300 bg-white text-slate-700';
+                    if (doc.status === 'ready') borderAccent = 'border-emerald-500 bg-emerald-50 text-emerald-700';
+                    if (doc.status === 'in_progress') borderAccent = 'border-amber-400 bg-amber-50 text-amber-800';
+
+                    htmlRows += `
+                        <div class="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:bg-slate-50/50">
+                            <div class="max-w-xl">
+                                <h3 class="font-semibold text-slate-900 text-sm">${doc.name}</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">${doc.description}</p>
+                            </div>
+                            <div>
+                                <select 
+                                    onchange="updateDocStatus(${doc.id}, this.value)"
+                                    class="text-xs font-medium rounded-lg border px-3 py-1.5 shadow-2xs focus:outline-hidden cursor-pointer transition-all ${borderAccent}">
+                                    <option value="missing" ${doc.status === 'missing' ? 'selected' : ''}>⚠️ Missing</option>
+                                    <option value="in_progress" ${doc.status === 'in_progress' ? 'selected' : ''}>🔄 In Progress</option>
+                                    <option value="ready" ${doc.status === 'ready' ? 'selected' : ''}>✅ Ready</option>
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                section.innerHTML = htmlHeader + htmlRows + '</div>';
+                container.appendChild(section);
+            }
+        }
+
+        async function updateDocStatus(documentId, statusValue) {
+            try {
+                const response = await fetch('/api/update-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ document_id: documentId, status: statusValue })
+                });
+                
+                if (response.ok) {
+                    // Re-fetch clean dataset to update state figures seamlessly
+                    fetchChecklist();
+                }
+            } catch (error) {
+                console.error('Could not save update state configuration:', error);
+            }
+        }
+    </script>
+</body>
+</html>
